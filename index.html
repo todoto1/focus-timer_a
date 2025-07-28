@@ -58,16 +58,11 @@
       border-radius:12px; text-align:center;
       box-shadow:0 4px 12px rgba(0,0,0,0.3);
     }
-    /* 모달 버튼들을 좌우로 배치 */
-    #notificationModal .modal-actions {
-      display: flex;
-      justify-content: center;
-      gap: 10px;
-      margin-top: 12px;
-    }
-    #notificationModal .modal-actions button {
-      flex: 1;
-      padding:6px 0;
+    #notificationModal button {
+      margin-top:12px; padding:6px 12px;
+      background:#000CFE; color:#fff;
+      border:none; border-radius:6px;
+      cursor:pointer;
     }
   </style>
 </head>
@@ -97,25 +92,22 @@
             style="margin-top:15px;"></canvas>
   </div>
 
-  <!-- 알림음 요소 -->
-  <audio id="alarmSound" src="./alarmSound.wav" preload="auto"></audio>
+  <!-- 알림음 요소: assets/정답.wav 와 경로 맞춰 주세요 -->
+  <audio id="alarmSound" src="./띠잉.mp3" preload="auto"></audio>
 
   <!-- 완료 모달 -->
   <div id="notificationModal">
     <div class="modal-content">
       <p>⏰ 포커스가 종료되었습니다!</p>
-      <div class="modal-actions">
-        <button id="endBtn" style="background:#E0E0E0; color:#000CFE;">종료</button>
-        <button id="repeatBtn" style="background:#000CFE; color:#fff;">반복하기</button>
-      </div>
+      <button id="closeModal">확인</button>
     </div>
   </div>
 
   <script>
-    // Notification 권한 요청 (최초 한 번만)
+    // OS 알림 권한 요청
     if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
+  Notification.requestPermission();
+}
 
     const canvas = document.getElementById("timerCanvas");
     const ctx = canvas.getContext("2d");
@@ -126,10 +118,9 @@
     const totalTimeDisplay= document.getElementById("totalTime");
     const weeklyCanvas    = document.getElementById("weeklyChart");
     const wctx            = weeklyCanvas.getContext("2d");
-    const alarmSound      = document.getElementById("alarmSound");
-    const modal           = document.getElementById("notificationModal");
-    const endBtn          = document.getElementById("endBtn");
-    const repeatBtn       = document.getElementById("repeatBtn");
+    const alarmSound = document.getElementById("alarmSound");
+    const modal = document.getElementById("notificationModal");
+    const closeModalBtn = document.getElementById("closeModal");
 
     const mainColor = "#000CFE";
 
@@ -141,29 +132,33 @@
       localStorage.setItem("savedDate", todayKey);
     }
 
-    let focusTime   = 25*60;
+    let focusTime = 25*60;
     let currentTime = focusTime;
-    let isRunning   = false;
-    let timer       = null;
+    let isRunning = false;
+    let timer = null;
     let sessionCount = parseInt(localStorage.getItem("sessions")||"0");
     let totalMinutes= parseInt(localStorage.getItem("totalTime")||"0");
-    let isDragging  = false;
+    let isDragging = false;
 
-    sessionsDisplay.textContent  = sessionCount;
-    totalTimeDisplay.textContent = totalMinutes;
+    sessionsDisplay.textContent = sessionCount;
+    totalTimeDisplay.textContent= totalMinutes;
 
     function drawTimer(){
       ctx.clearRect(0,0,canvas.width,canvas.height);
       const radius=110, x=canvas.width/2, y=canvas.height/2;
+      // 눈금
       for(let i=0;i<60;i++){
         const ang = i/60*2*Math.PI - Math.PI/2;
         const inner = i%5? radius-5: radius-10;
         ctx.beginPath();
         ctx.moveTo(x+inner*Math.cos(ang), y+inner*Math.sin(ang));
         ctx.lineTo(x+radius*Math.cos(ang), y+radius*Math.sin(ang));
-        ctx.strokeStyle="#B0BEC5"; ctx.lineWidth=i%5?1:2; ctx.stroke();
+        ctx.strokeStyle = "#B0BEC5";
+        ctx.lineWidth   = i%5?1:2;
+        ctx.stroke();
         if(i%5===0){
-          ctx.fillStyle=mainColor; ctx.font="11px Pretendard";
+          ctx.fillStyle = mainColor;
+          ctx.font = "11px Pretendard";
           const num = i===0? "0": i;
           ctx.fillText(num,
             x+(radius+14)*Math.cos(ang)-5,
@@ -171,24 +166,33 @@
           );
         }
       }
+      // 진행도 or 핸들
       if(isRunning){
         const prog = 1 - currentTime/focusTime;
-        ctx.beginPath(); ctx.moveTo(x,y);
-        ctx.arc(x,y,radius,-Math.PI/2,2*Math.PI*prog - Math.PI/2);
-        ctx.lineTo(x,y); ctx.fillStyle=mainColor; ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(x,y);
+        ctx.arc(x,y,radius, -Math.PI/2,
+                2*Math.PI*prog - Math.PI/2);
+        ctx.lineTo(x,y);
+        ctx.fillStyle=mainColor;
+        ctx.fill();
       } else {
         const handAng = focusTime/3600*2*Math.PI - Math.PI/2;
         ctx.beginPath();
-        ctx.arc(x+radius*Math.cos(handAng), y+radius*Math.sin(handAng),
-                6,0,2*Math.PI);
-        ctx.fillStyle=mainColor; ctx.fill();
+        ctx.arc(
+          x+radius*Math.cos(handAng),
+          y+radius*Math.sin(handAng),
+          6,0,2*Math.PI
+        );
+        ctx.fillStyle=mainColor;
+        ctx.fill();
       }
     }
 
     function updateTimeDisplay(){
       const m = Math.floor(currentTime/60),
             s = currentTime%60;
-      timeDisplay.textContent=
+      timeDisplay.textContent =
         `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
       drawTimer();
     }
@@ -196,105 +200,141 @@
     // 드래그로 시간 조정
     function adjustTime(e){
       const rect = canvas.getBoundingClientRect();
-      const cx = rect.left+canvas.width/2,
-            cy = rect.top +canvas.height/2;
-      let ang = Math.atan2(e.clientY-cy,e.clientX-cx)+Math.PI/2;
-      if(ang<0) ang+=2*Math.PI;
-      let pct=Math.round(ang/(2*Math.PI)*60);
-      if(pct<1) pct=1; if(pct>60) pct=60;
-      focusTime=pct*60; currentTime=focusTime;
-      updateTimeDisplay();
-    }
-    canvas.addEventListener("mousedown",e=>{ if(!isRunning){isDragging=true;adjustTime(e);} });
-    window.addEventListener("mousemove",e=>{ if(isDragging&&!isRunning)adjustTime(e); });
-    window.addEventListener("mouseup", ()=>{ if(!isRunning) isDragging=false; });
-    canvas.addEventListener("touchstart",e=>{ if(!isRunning){isDragging=true;adjustTime(e.touches[0]);} });
-    canvas.addEventListener("touchmove", e=>{ if(isDragging&&!isRunning)adjustTime(e.touches[0]); });
-    canvas.addEventListener("touchend",  ()=>{ if(!isRunning) isDragging=false; });
-
-    // 모달 닫기 (종료)
-    endBtn.onclick = ()=> {
-      modal.classList.remove("show");
-    };
-    // 반복하기
-    repeatBtn.onclick = ()=> {
-      modal.classList.remove("show");
-      // 타이머 재시작
+      const cx = rect.left + canvas.width/2,
+            cy = rect.top  + canvas.height/2;
+      let ang = Math.atan2(e.clientY-cy, e.clientX-cx) + Math.PI/2;
+      if(ang<0) ang += 2*Math.PI;
+      let pct = ang/(2*Math.PI),
+          mins= Math.round(pct*60);
+      if(mins<1) mins=1;
+      if(mins>60)mins=60;
+      focusTime = mins*60;
       currentTime = focusTime;
       updateTimeDisplay();
-      startPauseTimer();
-    };
+    }
+    canvas.addEventListener("mousedown", e=>{
+      if(!isRunning){ isDragging=true; adjustTime(e); }
+    });
+    window.addEventListener("mousemove", e=>{
+      if(isDragging && !isRunning) adjustTime(e);
+    });
+    window.addEventListener("mouseup", ()=>{
+      if(!isRunning) isDragging=false;
+    });
+    canvas.addEventListener("touchstart", e=>{
+      if(!isRunning){
+        isDragging=true;
+        adjustTime(e.touches[0]);
+      }
+    });
+    canvas.addEventListener("touchmove", e=>{
+      if(isDragging && !isRunning) adjustTime(e.touches[0]);
+    });
+    canvas.addEventListener("touchend", ()=>{
+      if(!isRunning) isDragging=false;
+    });
+
+    // 모달 닫기
+    closeModalBtn.onclick = ()=> modal.classList.remove("show");
 
     // 알림 + 모달 + 사운드
     function notifyEnd(){
-      // 사운드
-      alarmSound.currentTime=0;
+      // 1) 사운드
+      alarmSound.currentTime = 0;
       alarmSound.play().catch(console.warn);
-      // OS 알림
+
+      // 2) OS 알림
       if(Notification.permission==="granted"){
-        new Notification("⏰ 타이머 완료!",{ body:"집중 세션이 끝났습니다." });
+        new Notification("⏰ 타이머 완료!",{
+          body:"집중 세션이 끝났습니다."
+        });
       }
-      // 모달
+      // 3) 모달
       modal.classList.add("show");
     }
 
     function startPauseTimer(){
       if(!isRunning){
         timer = setInterval(()=>{
-          currentTime--; updateTimeDisplay();
+          currentTime--;
+          updateTimeDisplay();
           if(currentTime<=0){
             clearInterval(timer);
-            isRunning=false; startPauseBtn.textContent="시작";
-            // 통계 갱신
-            sessionCount++; totalMinutes+=focusTime/60;
+            isRunning=false;
+            startPauseBtn.textContent="시작";
+
+            // 세션 저장
+            sessionCount++;
+            totalMinutes += focusTime/60;
             localStorage.setItem("sessions",sessionCount);
             localStorage.setItem("totalTime",totalMinutes);
             sessionsDisplay.textContent=sessionCount;
             totalTimeDisplay.textContent=totalMinutes;
+
+            // 주간차트 갱신
             updateWeeklyData();
+
             // 알림
             notifyEnd();
+
+            // 리셋
+            currentTime = focusTime;
+            updateTimeDisplay();
           }
         },1000);
-        isRunning=true; startPauseBtn.textContent="일시정지";
+        isRunning=true;
+        startPauseBtn.textContent="일시정지";
       } else {
         clearInterval(timer);
-        isRunning=false; startPauseBtn.textContent="시작";
+        isRunning=false;
+        startPauseBtn.textContent="시작";
       }
     }
 
     function resetTimer(){
-      clearInterval(timer); isRunning=false; startPauseBtn.textContent="시작";
-      currentTime=focusTime; updateTimeDisplay();
+      clearInterval(timer);
+      isRunning=false;
+      startPauseBtn.textContent="시작";
+      currentTime = focusTime;
+      updateTimeDisplay();
     }
 
     function updateWeeklyData(){
-      const today=new Date().getDay();
-      let w=JSON.parse(localStorage.getItem("weeklyData")||"[]");
+      const today = new Date().getDay();
+      let w = JSON.parse(localStorage.getItem("weeklyData")||"[]");
       if(w.length!==7) w=[0,0,0,0,0,0,0];
-      w[today]++; localStorage.setItem("weeklyData",JSON.stringify(w));
+      w[today]++;
+      localStorage.setItem("weeklyData",JSON.stringify(w));
       drawWeeklyChart();
     }
+
     function drawWeeklyChart(){
-      let w=JSON.parse(localStorage.getItem("weeklyData")||"[]");
+      let w = JSON.parse(localStorage.getItem("weeklyData")||"[]");
       if(w.length!==7) w=[0,0,0,0,0,0,0];
       wctx.clearRect(0,0,weeklyCanvas.width,weeklyCanvas.height);
-      const barW=20,gap=18;
+      const barW=20, gap=18;
       w.forEach((v,i)=>{
-        const x=i*(barW+gap)+20, h=v*12;
+        const x = i*(barW+gap)+20,
+              h = v*12;
         wctx.fillStyle=mainColor;
         wctx.fillRect(x,weeklyCanvas.height-h-20,barW,h);
-        wctx.fillStyle=mainColor; wctx.font="11px Pretendard";
-        wctx.fillText(["일","월","화","수","목","금","토"][i],x+2,weeklyCanvas.height-5);
+        // 요일
+        wctx.fillStyle=mainColor;
+        wctx.font="11px Pretendard";
+        wctx.fillText(["일","월","화","수","목","금","토"][i],
+                      x+2, weeklyCanvas.height-5);
+        // 카운트
         if(v>0){
-          wctx.fillStyle="#333"; wctx.font="10px Pretendard";
-          wctx.fillText(v,x+4,weeklyCanvas.height-h-25);
+          wctx.fillStyle="#333";
+          wctx.font="10px Pretendard";
+          wctx.fillText(v,
+            x+4, weeklyCanvas.height-h-25);
         }
       });
     }
 
-    startPauseBtn.onclick=startPauseTimer;
-    resetBtn.onclick=resetTimer;
+    startPauseBtn.onclick = startPauseTimer;
+    resetBtn.onclick      = resetTimer;
 
     updateTimeDisplay();
     drawWeeklyChart();
